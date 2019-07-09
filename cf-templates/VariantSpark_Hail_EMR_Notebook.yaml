@@ -4,8 +4,8 @@ Description: Variant Spark CF template to spin EMR clusters with Jupyter Noteboo
 Mappings:
   Constants:
     GitHub:
-      Repo: "https://github.com/aehrc/VariantSpark"
-      Version: "master"
+      Repo: "https://github.com/aehrc/VariantSpark-aws"
+      Version: "dev"
 Parameters:
   # Hardware Group
   MasterNodePricing:
