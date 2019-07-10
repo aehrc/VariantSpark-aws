@@ -46,7 +46,7 @@ done
 BUCKET=$(awk -v XX="$NotebookPath" 'BEGIN{x=substr(XX,6); split(x,a,"/"); print(a[1])}')
 PREFIX=$(awk -v XX="$NotebookPath" -v YY="$BUCKET" 'BEGIN{y=length(YY); print(substr(XX,7+y));}')
 
-wget "${PATH_PREFIX}/cloud/aws-emr/cf-templates/VariantSpark_example_with_Hail_library.ipynb"
+wget "${PATH_PREFIX}/cf-templates/VariantSpark_example_with_Hail_library.ipynb"
 aws s3 cp VariantSpark_example_with_Hail_library.ipynb $NotebookPath/
 
 upstart_jupyter() {
