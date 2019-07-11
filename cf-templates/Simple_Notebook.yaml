@@ -1,0 +1,222 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Variant Spark CF template to spin EMR clusters with Jupyter Notebook. Has a simple interface.
+Mappings:
+  Constants:
+    Source:
+      PathPrefix: "https://github.com/aehrc/VariantSpark-aws/raw/dev"
+Parameters:
+  # Hardware Group
+  NumCPU:
+    Description: Number of CPUs for core instances. It is not the number of instances. Instances are AWS r4 EC2.
+    Type: Number
+    Default: "32"
+  # Security:
+  IpAddress:
+    Description: The ip address of the machine from which you want access.
+    Type: String
+    AllowedPattern: "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
+    ConstraintDescription: "must be a valid ip address"
+Resources:
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      # Just a random /20 cidr block
+      CidrBlock: 71.49.240.0/20
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: InternetGateway
+      VpcId:
+        Ref: VPC
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        !GetAtt VPC.CidrBlock
+      MapPublicIpOnLaunch: true
+  Route:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+      RouteTableId:
+        Ref: RouteTable
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      SubnetId:
+        Ref: Subnet
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow access from one ip address to VariantSpark Notebook."
+      GroupName: "VariantSpark Notebook"
+      VpcId:
+        Ref: VPC
+      SecurityGroupEgress:
+        - Description: "All outbound traffic"
+          CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      SecurityGroupIngress:
+        - Description: "Notebook Access"
+          IpProtocol: tcp
+          FromPort: 8888
+          ToPort: 8888
+          CidrIp:
+            !Sub "${IpAddress}/32"
+        - Description: "Ganglia Access"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp:
+            !Sub "${IpAddress}/32"
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+  EMRClusterV5:
+    Type: AWS::EMR::Cluster
+    DependsOn: SubnetRouteTableAssociation
+    Properties:
+      Instances:
+        AdditionalMasterSecurityGroups:
+          - Ref: SecurityGroup
+        AdditionalSlaveSecurityGroups:
+          - Ref: SecurityGroup
+        Ec2SubnetId:
+          Ref: Subnet
+        CoreInstanceFleet:
+          InstanceTypeConfigs:
+          - InstanceType: "r4.2xlarge"
+            WeightedCapacity: 8
+            EbsConfiguration:
+              EbsBlockDeviceConfigs:
+                - VolumeSpecification:
+                    SizeInGB: 64
+                    VolumeType: 'gp2'
+                  VolumesPerInstance: 1
+          - InstanceType: "r4.4xlarge"
+            WeightedCapacity: 16
+            EbsConfiguration:
+              EbsBlockDeviceConfigs:
+                - VolumeSpecification:
+                    SizeInGB: 128
+                    VolumeType: 'gp2'
+                  VolumesPerInstance: 1
+          - InstanceType: "r4.8xlarge"
+            WeightedCapacity: 32
+            EbsConfiguration:
+              EbsBlockDeviceConfigs:
+                - VolumeSpecification:
+                    SizeInGB: 256
+                    VolumeType: 'gp2'
+                  VolumesPerInstance: 1
+          - InstanceType: "r4.16xlarge"
+            WeightedCapacity: 64
+            EbsConfiguration:
+              EbsBlockDeviceConfigs:
+                - VolumeSpecification:
+                    SizeInGB: 512
+                    VolumeType: 'gp2'
+                  VolumesPerInstance: 1
+          Name: "Core fleet"
+          TargetSpotCapacity:
+            !Ref NumCPU
+        MasterInstanceFleet:
+          InstanceTypeConfigs:
+          - InstanceType: "r4.xlarge"
+          Name: "Master fleet"
+          TargetSpotCapacity: 1
+      BootstrapActions:
+      - Name: Install Jupyter
+        ScriptBootstrapAction:
+          Args:
+            - "--path-prefix"
+            - !FindInMap [Constants, Source, PathPrefix]
+            - "--bootstrap-file"
+            - "/bootstrap/install-jupyter.sh"
+            - "--"
+            - "--notebookPath"
+            - !Sub "s3://${Bucket}/notebook"
+          Path: "s3://variant-spark/s3-bootstrap.sh"
+      - Name: Install Hail
+        ScriptBootstrapAction:
+          Args:
+            - "--path-prefix"
+            - !FindInMap [Constants, Source, PathPrefix]
+            - "--bootstrap-file"
+            - "/bootstrap/install-hail.sh"
+            - "--"
+            - "--input-path"
+            - "s3://variant-spark/HailJupyter/hail/0.1_2.2.1"
+            - "--hail-version"
+            - "0.1"
+            - "--spark-version"
+            - "2.2.1"
+          Path: "s3://variant-spark/s3-bootstrap.sh"
+      Configurations:
+      - Classification: emrfs-site
+        ConfigurationProperties:
+          fs.s3.maxConnections: '500'
+      - Classification: spark
+        ConfigurationProperties:
+          maximizeResourceAllocation: 'true'
+      - Classification: spark-defaults
+        ConfigurationProperties:
+          spark.sql.files.openCostInBytes: '1099511627776'
+          spark.hadoop.io.compression.codecs: 'org.apache.hadoop.io.compress.DefaultCodec,is.hail.io.compress.BGzipCodec,org.apache.hadoop.io.compress.GzipCodec'
+          spark.hadoop.parquet.block.size: '1099511627776'
+          spark.executor.extraClassPath: '/usr/lib/hadoop-lzo/lib/*:/usr/lib/hadoop/hadoop-aws.jar:/usr/share/aws/aws-java-sdk/*:/usr/share/aws/emr/emrfs/conf:/usr/share/aws/emr/emrfs/lib/*:/usr/share/aws/emr/emrfs/auxlib/*:/usr/share/aws/emr/security/conf:/usr/share/aws/emr/security/lib/*:/home/hadoop/hail-all-spark.jar'
+          spark.locality.wait: '10s'
+          spark.driver.extraClassPath: '/usr/lib/hadoop-lzo/lib/*:/usr/lib/hadoop/hadoop-aws.jar:/usr/share/aws/aws-java-sdk/*:/usr/share/aws/emr/emrfs/conf:/usr/share/aws/emr/emrfs/lib/*:/usr/share/aws/emr/emrfs/auxlib/*:/usr/share/aws/emr/security/conf:/usr/share/aws/emr/security/lib/*:/home/hadoop/hail-all-spark.jar'
+          spark.serializer: 'org.apache.spark.serializer.KryoSerializer'
+          spark.sql.files.maxPartitionBytes: '1099511627776'
+          spark.dynamicAllocation.enabled: 'false'
+      Applications:
+      - Name: Ganglia
+      - Name: Spark
+      Name:
+        !Ref AWS::StackName
+      JobFlowRole: "EMR_EC2_DefaultRole"
+      ServiceRole: "EMR_DefaultRole"
+      ReleaseLabel: "emr-5.12.0"
+      LogUri:
+        !Sub "s3://${Bucket}/logs/"
+      VisibleToAllUsers: true
+      Tags:
+      - Key: Name
+        Value:
+          Fn::Join:
+          - ''
+          - - emr-instance-
+            - Ref: AWS::StackName
+            - ''
+      - Key: Stack ID
+        Value:
+          Ref: AWS::StackName
+Outputs:
+  ClusterID:
+    Description: "EMR Cluster ID"
+    Value: !Ref "EMRClusterV5"
+  JupyterURL:
+    Description: Jupyter Notebook URL
+    Value: !Sub "http://${EMRClusterV5.MasterPublicDNS}:8888"
+  GangliaURL:
+    Description: Ganglia URL
+    Value: !Sub "http://${EMRClusterV5.MasterPublicDNS}/ganglia"
