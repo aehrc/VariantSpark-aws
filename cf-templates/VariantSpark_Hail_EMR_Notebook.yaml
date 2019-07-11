@@ -5,7 +5,7 @@ Mappings:
   Constants:
     GitHub:
       Repo: "https://github.com/aehrc/VariantSpark-aws"
-      Version: "dev"
+      Version: "v0.1.0"
 Parameters:
   # Hardware Group
   MasterNodePricing:
