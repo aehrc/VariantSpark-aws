@@ -4,8 +4,8 @@ Description: Variant Spark CF template to spin EMR clusters with Jupyter Noteboo
 Mappings:
   Constants:
     GitHub:
-      Repo: "https://github.com/aehrc/VariantSpark"
-      Version: "master"
+      Repo: "https://github.com/aehrc/VariantSpark-aws"
+      Version: "v0.1.0"
 Parameters:
   # Hardware Group
   MasterNodePricing:
@@ -147,7 +147,7 @@ Resources:
               - "${repo}/raw/${version}"
               - {repo: !FindInMap [Constants, GitHub, Repo], version: !FindInMap [Constants, GitHub, Version]}
             - "--bootstrap-file"
-            - "/cloud/aws-emr/bootstrap/install-jupyter.sh"
+            - "/bootstrap/install-jupyter.sh"
             - "--"
             - "--notebookPath"
             - Ref: NotebookDir
@@ -160,7 +160,7 @@ Resources:
               - "${repo}/raw/${version}"
               - {repo: !FindInMap [Constants, GitHub, Repo], version: !FindInMap [Constants, GitHub, Version]}
             - "--bootstrap-file"
-            - "/cloud/aws-emr/bootstrap/install-hail.sh"
+            - "/bootstrap/install-hail.sh"
             - "--"
             - "--input-path"
             - "s3://variant-spark/HailJupyter/hail/0.1_2.2.1"
