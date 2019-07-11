@@ -3,9 +3,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Variant Spark CF template to spin EMR clusters with Jupyter Notebook.
 Mappings:
   Constants:
-    GitHub:
-      Repo: "https://github.com/aehrc/VariantSpark-aws"
-      Version: "dev"
+    Source:
+      PathPrefix: "https://github.com/aehrc/VariantSpark-aws/raw/dev"
 Parameters:
   # Hardware Group
   MasterNodePricing:
@@ -143,9 +142,7 @@ Resources:
         ScriptBootstrapAction:
           Args:
             - "--path-prefix"
-            - !Sub
-              - "${repo}/raw/${version}"
-              - {repo: !FindInMap [Constants, GitHub, Repo], version: !FindInMap [Constants, GitHub, Version]}
+            - !FindInMap [Constants, Source, PathPrefix]
             - "--bootstrap-file"
             - "/bootstrap/install-jupyter.sh"
             - "--"
@@ -156,9 +153,7 @@ Resources:
         ScriptBootstrapAction:
           Args:
             - "--path-prefix"
-            - !Sub
-              - "${repo}/raw/${version}"
-              - {repo: !FindInMap [Constants, GitHub, Repo], version: !FindInMap [Constants, GitHub, Version]}
+            - !FindInMap [Constants, Source, PathPrefix]
             - "--bootstrap-file"
             - "/bootstrap/install-hail.sh"
             - "--"
