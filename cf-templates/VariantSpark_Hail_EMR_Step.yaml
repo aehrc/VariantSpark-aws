@@ -3,9 +3,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Variant Spark CF template to spin EMR cluster to process a single VariantSpark job.
 Mappings:
   Constants:
-    GitHub:
-      Repo: "https://github.com/aehrc/VariantSpark-aws"
-      Version: "v0.1.0"
+    Source:
+      PathPrefix: "https://github.com/aehrc/VariantSpark-aws/raw/v0.2.0"
 Parameters:
   # Random-Forest Parameters Group
   NumTree:
@@ -213,9 +212,7 @@ Resources:
       - Name: Install Jupyter
         ScriptBootstrapAction:
             - "--path-prefix"
-            - !Sub
-              - "${repo}/raw/${version}"
-              - {repo: !FindInMap [Constants, GitHub, Repo], version: !FindInMap [Constants, GitHub, Version]}
+            - !FindInMap [Constants, Source, PathPrefix]
             - "--bootstrap-file"
             - "/bootstrap/install-jupyter-noNotebook.sh"
             - "--"
@@ -224,9 +221,7 @@ Resources:
         ScriptBootstrapAction:
           Args:
             - "--path-prefix"
-            - !Sub
-              - "${repo}/raw/${version}"
-              - {repo: !FindInMap [Constants, GitHub, Repo], version: !FindInMap [Constants, GitHub, Version]}
+            - !FindInMap [Constants, Source, PathPrefix]
             - "--bootstrap-file"
             - "/bootstrap/install-hail.sh"
             - "--"

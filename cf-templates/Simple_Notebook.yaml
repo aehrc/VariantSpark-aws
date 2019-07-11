@@ -1,91 +1,104 @@
 ---
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Variant Spark CF template to spin EMR clusters with Jupyter Notebook.
+Description: Variant Spark CF template to spin EMR clusters with Jupyter Notebook. Has a simple interface.
 Mappings:
   Constants:
     Source:
       PathPrefix: "https://github.com/aehrc/VariantSpark-aws/raw/v0.2.0"
 Parameters:
   # Hardware Group
-  MasterNodePricing:
-    Description: Choose the pricing option for master node EC2 instance with spot pricing or on-demand pricing. Spot is cheaper but the process may fail halfway through.
-    Type: String
-    Default: "Spot"
-    AllowedValues:
-      - Spot
-      - OnDemand
-  SpotNumCPU:
-    Description: Number of Spot CPUs for core instances. It is not the number of instances. Instances are AWS r4 EC2.
+  NumCPU:
+    Description: Number of CPUs for core instances. It is not the number of instances. Instances are AWS r4 EC2.
     Type: Number
     Default: "32"
-  OnDemandNumCPU:
-    Description: Number of OnDemand CPUs for core instances. It is not the number of instances. Instances are AWS r4 EC2.
-    Type: Number
-    Default: "0"
   # Security:
-  EC2KeyPair:
-    Description: EC2 key to ssh into your cluster nodes as "hadoop" user. How to create EC2 KeyPair -> https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html
-    Type: AWS::EC2::KeyPair::KeyName
-  SecurityGroup:
-    Description: The security group needs to allow traffic from your computer's IP.
-    Type: AWS::EC2::SecurityGroup::Id
-  Subnet:
-    Description: Public subnet in your VPC. You may set it to your default Subnet.
-    Type: AWS::EC2::Subnet::Id
-  #Jupyter Notebook
-  NotebookDir:
-    Description: S3 path to notebook directory for the Jupyter notebook (no slash at the end).
+  IpAddress:
+    Description: The ip address of the machine from which you want access.
     Type: String
-  #General EMR options
-  LogPath:
-    Description: S3 path to store EMR and VariantSpark logs
-    Type: String
-  terminationProtected:
-    Description: Is the cluster to have termination protection enabled. If you set it to true, deleting this stack will not terminate the EMR cluster. You should manually terminate the cluster.
-    Type: String
-    AllowedValues:
-    - 'true'
-    - 'false'
-    Default: 'false'
-    ConstraintDescription: Boolean
-Metadata:
-  'AWS::CloudFormation::Interface':
-    ParameterGroups:
-      - Label:
-          default: Access and Security (if needed)
-        Parameters:
-          - EC2KeyPair
-          - SecurityGroup
-          - Subnet
-      - Label:
-          default: Jupyter notebook parameters
-        Parameters:
-          - NotebookDir
-      - Label:
-          default: Cluster size and pricing
-        Parameters:
-          - MasterNodePricing
-          - SpotNumCPU
-          - OnDemandNumCPU
-      - Label:
-          default: General
-        Parameters:
-          - LogPath
-          - terminationProtected
-Conditions:
-  SpotMaster: !Equals [ !Ref MasterNodePricing, Spot ]
-  OnDemandMaster: !Equals [ !Ref MasterNodePricing, OnDemand ]
+    AllowedPattern: "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
+    ConstraintDescription: "must be a valid ip address"
 Resources:
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      # Just a random /20 cidr block
+      CidrBlock: 71.49.240.0/20
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId:
+        Ref: InternetGateway
+      VpcId:
+        Ref: VPC
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        !GetAtt VPC.CidrBlock
+      MapPublicIpOnLaunch: true
+  Route:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+      RouteTableId:
+        Ref: RouteTable
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: RouteTable
+      SubnetId:
+        Ref: Subnet
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow access from one ip address to VariantSpark Notebook."
+      GroupName: "VariantSpark Notebook"
+      VpcId:
+        Ref: VPC
+      SecurityGroupEgress:
+        - Description: "All outbound traffic"
+          CidrIp: 0.0.0.0/0
+          IpProtocol: -1
+      SecurityGroupIngress:
+        - Description: "Notebook Access"
+          IpProtocol: tcp
+          FromPort: 8888
+          ToPort: 8888
+          CidrIp:
+            !Sub "${IpAddress}/32"
+        - Description: "Ganglia Access"
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp:
+            !Sub "${IpAddress}/32"
+  Bucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
   EMRClusterV5:
     Type: AWS::EMR::Cluster
+    DependsOn: SubnetRouteTableAssociation
     Properties:
       Instances:
         AdditionalMasterSecurityGroups:
           - Ref: SecurityGroup
         AdditionalSlaveSecurityGroups:
           - Ref: SecurityGroup
-        Ec2KeyName:
-          Ref: EC2KeyPair
         Ec2SubnetId:
           Ref: Subnet
         CoreInstanceFleet:
@@ -123,20 +136,13 @@ Resources:
                     VolumeType: 'gp2'
                   VolumesPerInstance: 1
           Name: "Core fleet"
-          TargetOnDemandCapacity:
-            !Ref OnDemandNumCPU
           TargetSpotCapacity:
-            !Ref SpotNumCPU
+            !Ref NumCPU
         MasterInstanceFleet:
           InstanceTypeConfigs:
           - InstanceType: "r4.xlarge"
           Name: "Master fleet"
-          TargetOnDemandCapacity:
-            !If [OnDemandMaster, 1, 0]
-          TargetSpotCapacity:
-            !If [SpotMaster, 1, 0]
-        TerminationProtected:
-          Ref: terminationProtected
+          TargetSpotCapacity: 1
       BootstrapActions:
       - Name: Install Jupyter
         ScriptBootstrapAction:
@@ -147,7 +153,7 @@ Resources:
             - "/bootstrap/install-jupyter.sh"
             - "--"
             - "--notebookPath"
-            - Ref: NotebookDir
+            - !Sub "s3://${Bucket}/notebook"
           Path: "s3://variant-spark/s3-bootstrap.sh"
       - Name: Install Hail
         ScriptBootstrapAction:
@@ -191,7 +197,7 @@ Resources:
       ServiceRole: "EMR_DefaultRole"
       ReleaseLabel: "emr-5.12.0"
       LogUri:
-        Ref: LogPath
+        !Sub "s3://${Bucket}/logs/"
       VisibleToAllUsers: true
       Tags:
       - Key: Name
@@ -211,6 +217,6 @@ Outputs:
   JupyterURL:
     Description: Jupyter Notebook URL
     Value: !Sub "http://${EMRClusterV5.MasterPublicDNS}:8888"
-  sshMasterNode:
-    Description: ssh to the master node of cluster
-    Value: !Sub "ssh -i \"${EC2KeyPair}.pem\" hadoop@${EMRClusterV5.MasterPublicDNS}"
+  GangliaURL:
+    Description: Ganglia URL
+    Value: !Sub "http://${EMRClusterV5.MasterPublicDNS}/ganglia"
