@@ -206,8 +206,11 @@ Resources:
           Ref: AWS::StackName
 Outputs:
   ClusterID:
-    Description: "EMR Cluster ID"
-    Value: !Ref "EMRClusterV5"
+    Description: EMR Cluster URL
+    Value: !Sub "https://console.aws.amazon.com/elasticmapreduce/home?#cluster-details:${EMRClusterV5}"
+  GangliaURL:
+    Description: Ganglia URL
+    Value: !Sub "http://${EMRClusterV5.MasterPublicDNS}/ganglia"
   JupyterURL:
     Description: Jupyter Notebook URL
     Value: !Sub "http://${EMRClusterV5.MasterPublicDNS}:8888"
