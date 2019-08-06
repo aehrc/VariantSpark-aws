@@ -216,7 +216,7 @@ Resources:
             - "--bootstrap-file"
             - "/bootstrap/install-jupyter-noNotebook.sh"
             - "--"
-          Path: "s3://variant-spark/s3-bootstrap.sh"
+        Path: "s3://variant-spark/s3-bootstrap.sh"
       - Name: Install Hail
         ScriptBootstrapAction:
           Args:
