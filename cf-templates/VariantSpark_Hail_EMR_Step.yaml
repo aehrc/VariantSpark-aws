@@ -4,7 +4,7 @@ Description: Variant Spark CF template to spin EMR cluster to process a single V
 Mappings:
   Constants:
     Source:
-      PathPrefix: "https://github.com/aehrc/VariantSpark-aws/raw/v0.2.0"
+      PathPrefix: "https://github.com/aehrc/VariantSpark-aws/raw/v0.3.0"
 Parameters:
   # Random-Forest Parameters Group
   NumTree:
@@ -216,7 +216,7 @@ Resources:
             - "--bootstrap-file"
             - "/bootstrap/install-jupyter-noNotebook.sh"
             - "--"
-          Path: "s3://variant-spark/s3-bootstrap.sh"
+        Path: "s3://variant-spark/s3-bootstrap.sh"
       - Name: Install Hail
         ScriptBootstrapAction:
           Args:
@@ -313,5 +313,8 @@ Resources:
           Ref: AWS::StackName
 Outputs:
   ClusterID:
-    Description: "EMR Cluster ID"
-    Value: !Ref "EMRClusterV5"
+    Description: EMR Cluster URL
+    Value: !Sub "https://console.aws.amazon.com/elasticmapreduce/home?#cluster-details:${EMRClusterV5}"
+  GangliaURL:
+    Description: Ganglia URL
+    Value: !Sub "http://${EMRClusterV5.MasterPublicDNS}/ganglia"
