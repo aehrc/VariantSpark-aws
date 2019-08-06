@@ -4,7 +4,7 @@ Description: Variant Spark CF template to spin EMR cluster to process a single V
 Mappings:
   Constants:
     Source:
-      PathPrefix: "https://github.com/aehrc/VariantSpark-aws/raw/v0.2.0"
+      PathPrefix: "https://github.com/aehrc/VariantSpark-aws/raw/v0.3.0"
 Parameters:
   # Random-Forest Parameters Group
   NumTree:
